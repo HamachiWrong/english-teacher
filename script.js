@@ -5,20 +5,16 @@
 
   const inputEl = document.getElementById('inputText');
   const splitButton = document.getElementById('splitButton');
+  const playAllButton = document.getElementById('playAllButton');
   const linesContainer = document.getElementById('linesContainer');
-  const stopAllButton = document.getElementById('stopAllButton');
   const voiceInfoEl = document.getElementById('voiceInfo');
   const rateInput = document.getElementById('rateInput');
   const rateValue = document.getElementById('rateValue');
   const voiceSelect = document.getElementById('voiceSelect');
-  const maleOnlyCheckbox = document.getElementById('maleOnly');
-  const langSelect = document.getElementById('langSelect');
-  const refreshVoicesBtn = document.getElementById('refreshVoices');
   const pitchInput = document.getElementById('pitchInput');
   const pitchValue = document.getElementById('pitchValue');
   const volumeInput = document.getElementById('volumeInput');
   const volumeValue = document.getElementById('volumeValue');
-  const ttsProviderSelect = document.getElementById('ttsProvider');
 
   // ElevenLabs API設定
   const ELEVENLABS_API_KEY = 'sk_5cf916d2d44a5678a646f71557d2e3d489c6981c328e0957';
@@ -34,12 +30,6 @@
     console.log('ElevenLabs APIキー検証OK:', ELEVENLABS_API_KEY.substring(0, 10) + '...');
     return true;
   }
-  
-  /** @type {SpeechSynthesisVoice|null} */
-  let selectedVoice = null;
-  
-  /** @type {Array} */
-  let elevenLabsVoices = [];
   
   /** @type {string|null} */
   let selectedElevenLabsVoice = null;
@@ -130,54 +120,7 @@
   volumeInput.addEventListener('input', updatePitchVolumeLabels);
 
   async function buildVoiceList() {
-    const provider = ttsProviderSelect?.value || 'web';
-    
-    if (provider === 'elevenlabs') {
-      await buildElevenLabsVoiceList();
-    } else {
-      buildWebSpeechVoiceList();
-    }
-  }
-
-  function buildWebSpeechVoiceList() {
-    const voices = window.speechSynthesis.getVoices() || [];
-    const wantMale = !!maleOnlyCheckbox?.checked;
-    const langPref = langSelect?.value || 'auto';
-
-    // naive male detection by name hints
-    const maleHints = /(male|guy|alex|daniel|fred|george|hank|mike)/i;
-
-    let pool = voices;
-    if (langPref === 'auto') {
-      pool = voices.filter(v => /en[-_]/i.test(v.lang));
-    } else if (langPref !== '*') {
-      pool = voices.filter(v => v.lang === langPref || v.lang?.startsWith(langPref + '-'));
-    }
-
-    const filtered = pool.filter(v => !wantMale || maleHints.test(v.name));
-    const list = filtered.length ? filtered : pool;
-
-    // Clear and rebuild
-    voiceSelect.innerHTML = '';
-    list.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v.name;
-      opt.textContent = `${v.name} (${v.lang})`;
-      voiceSelect.appendChild(opt);
-    });
-
-    // Try to keep previous selection if possible
-    const keepName = selectedVoice?.name;
-    if (keepName && list.some(v => v.name === keepName)) {
-      voiceSelect.value = keepName;
-    } else if (list.length > 0) {
-      voiceSelect.value = list[0].name;
-      selectedVoice = list[0];
-    } else {
-      selectedVoice = null;
-    }
-
-    updateVoiceInfo();
+    await buildElevenLabsVoiceList();
   }
 
   async function buildElevenLabsVoiceList() {
@@ -205,11 +148,16 @@
         voiceSelect.appendChild(opt);
       });
 
-      // Select first voice by default
-      if (voices.length > 0) {
-        voiceSelect.value = voices[0].voice_id;
-        selectedElevenLabsVoice = voices[0].voice_id;
-        console.log('デフォルト音声選択:', voices[0]);
+      // Select Roger voice by default, or first voice if Roger not found
+      let defaultVoice = voices.find(v => v.name.toLowerCase().includes('roger'));
+      if (!defaultVoice && voices.length > 0) {
+        defaultVoice = voices[0];
+      }
+      
+      if (defaultVoice) {
+        voiceSelect.value = defaultVoice.voice_id;
+        selectedElevenLabsVoice = defaultVoice.voice_id;
+        console.log('デフォルト音声選択:', defaultVoice);
       }
 
       updateVoiceInfo();
@@ -221,25 +169,15 @@
   }
 
   function updateVoiceInfo() {
-    const provider = ttsProviderSelect?.value || 'web';
-    
-    if (provider === 'elevenlabs') {
-      if (selectedElevenLabsVoice) {
-        const voice = elevenLabsVoices.find(v => v.voice_id === selectedElevenLabsVoice);
-        if (voice) {
-          voiceInfoEl.textContent = `ElevenLabs音声: ${voice.name} (${voice.labels?.gender || 'unknown'})`;
-        } else {
-          voiceInfoEl.textContent = 'ElevenLabs音声: 選択中...';
-        }
+    if (selectedElevenLabsVoice) {
+      const voice = elevenLabsVoices.find(v => v.voice_id === selectedElevenLabsVoice);
+      if (voice) {
+        voiceInfoEl.textContent = `ElevenLabs音声: ${voice.name} (${voice.labels?.gender || 'unknown'})`;
       } else {
         voiceInfoEl.textContent = 'ElevenLabs音声: 選択中...';
       }
     } else {
-      if (selectedVoice) {
-        voiceInfoEl.textContent = `Web Speech音声: ${selectedVoice.name} (${selectedVoice.lang})`;
-      } else {
-        voiceInfoEl.textContent = 'Web Speech音声が見つかりませんでした。ブラウザ設定で英語音声を有効にしてください。';
-      }
+      voiceInfoEl.textContent = 'ElevenLabs音声: 選択中...';
     }
   }
 
@@ -247,13 +185,10 @@
     buildVoiceList();
   }
 
-  // Some browsers (esp. Chrome) load voices asynchronously
-  window.speechSynthesis.onvoiceschanged = function() { refreshVoiceSelection(); };
   
   // 初期化処理
   function initializeApp() {
     console.log('アプリ初期化中...');
-    console.log('選択された音声エンジン:', ttsProviderSelect?.value);
     
     // Try initial selection
     refreshVoiceSelection();
@@ -267,57 +202,8 @@
   }
 
   voiceSelect.addEventListener('change', () => {
-    const provider = ttsProviderSelect?.value || 'web';
-    
-    if (provider === 'elevenlabs') {
-      selectedElevenLabsVoice = voiceSelect.value;
-    } else {
-      const voices = window.speechSynthesis.getVoices() || [];
-      const v = voices.find(v => v.name === voiceSelect.value);
-      selectedVoice = v || null;
-    }
+    selectedElevenLabsVoice = voiceSelect.value;
     updateVoiceInfo();
-  });
-
-  ttsProviderSelect.addEventListener('change', () => {
-    buildVoiceList();
-  });
-
-  maleOnlyCheckbox.addEventListener('change', () => {
-    if (ttsProviderSelect?.value === 'web') {
-      buildVoiceList();
-    }
-  });
-
-  langSelect.addEventListener('change', () => {
-    if (ttsProviderSelect?.value === 'web') {
-      buildVoiceList();
-    }
-  });
-
-  refreshVoicesBtn.addEventListener('click', () => {
-    buildVoiceList();
-  });
-
-  // API接続テストボタン
-  const testApiBtn = document.getElementById('testApi');
-  testApiBtn.addEventListener('click', async () => {
-    console.log('=== ElevenLabs API接続テスト開始 ===');
-    voiceInfoEl.textContent = 'API接続テスト中...';
-    
-    try {
-      const voices = await fetchElevenLabsVoices();
-      if (voices.length > 0) {
-        voiceInfoEl.textContent = `API接続成功！${voices.length}個の音声を取得しました。`;
-        console.log('=== API接続テスト成功 ===');
-      } else {
-        voiceInfoEl.textContent = 'API接続は成功しましたが、音声が見つかりませんでした。';
-        console.log('=== API接続テスト: 音声なし ===');
-      }
-    } catch (error) {
-      voiceInfoEl.textContent = `API接続テスト失敗: ${error.message}`;
-      console.log('=== API接続テスト失敗 ===', error);
-    }
   });
 
   function splitIntoLines(text) {
@@ -378,21 +264,13 @@
     playBtn.addEventListener('click', async () => {
       if (!lineText) return;
       
-      const provider = ttsProviderSelect?.value || 'web';
-      
-      // Stop any current global speech
-      window.speechSynthesis.cancel();
       // Reset all playing indicators
       document.querySelectorAll('.line-item.playing').forEach(el => el.classList.remove('playing'));
 
       setPlaying(true);
 
       try {
-        if (provider === 'elevenlabs') {
-          await playElevenLabsSpeech(lineText);
-        } else {
-          playWebSpeech(lineText);
-        }
+        await playElevenLabsSpeech(lineText);
       } catch (error) {
         console.error('音声再生エラー:', error);
         setPlaying(false);
@@ -427,27 +305,6 @@
       }
     }
 
-    function playWebSpeech(text) {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = selectedVoice?.lang || 'en-US';
-      if (selectedVoice) utter.voice = selectedVoice;
-      utter.rate = parseFloat(rateInput.value) || 1;
-      utter.pitch = parseFloat(pitchInput.value) || 1;
-      utter.volume = parseFloat(volumeInput.value) || 1;
-
-      currentUtterance = utter;
-
-      utter.onend = () => {
-        setPlaying(false);
-        currentUtterance = null;
-      };
-      utter.onerror = () => {
-        setPlaying(false);
-        currentUtterance = null;
-      };
-
-      window.speechSynthesis.speak(utter);
-    }
 
     return item;
   }
@@ -465,10 +322,62 @@
 
   splitButton.addEventListener('click', renderLines);
 
-  stopAllButton.addEventListener('click', () => {
-    window.speechSynthesis.cancel();
-    document.querySelectorAll('.line-item.playing').forEach(el => el.classList.remove('playing'));
+  // 全体読み上げ機能
+  playAllButton.addEventListener('click', async () => {
+    const text = inputEl.value.trim();
+    if (!text) {
+      alert('テキストを入力してください');
+      return;
+    }
+
+    if (!selectedElevenLabsVoice) {
+      alert('音声を選択してください');
+      return;
+    }
+
+    try {
+      // ボタンを無効化
+      playAllButton.disabled = true;
+      playAllButton.textContent = '読み上げ中...';
+
+      // 全体テキストを読み上げ
+      await playElevenLabsSpeech(text);
+
+    } catch (error) {
+      console.error('全体読み上げエラー:', error);
+      alert(`読み上げエラー: ${error.message}`);
+    } finally {
+      // ボタンを再有効化
+      playAllButton.disabled = false;
+      playAllButton.textContent = '全体を読み上げる';
+    }
   });
+
+  // 全体読み上げ用の関数
+  async function playElevenLabsSpeech(text) {
+    if (!selectedElevenLabsVoice) {
+      throw new Error('ElevenLabs音声が選択されていません');
+    }
+
+    try {
+      const audioUrl = await generateElevenLabsSpeech(text, selectedElevenLabsVoice);
+      const audio = new Audio(audioUrl);
+      
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      audio.onerror = () => {
+        URL.revokeObjectURL(audioUrl);
+        throw new Error('音声の再生に失敗しました');
+      };
+
+      await audio.play();
+    } catch (error) {
+      throw error;
+    }
+  }
+
 })();
 
 

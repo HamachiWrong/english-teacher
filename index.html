@@ -3,12 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Line TTS Player</title>
+  <title>英語の発音できるくん</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="app-header">
-    <h1>英語行読み上げプレーヤー</h1>
+    <h1>英語の発音できるくん</h1>
   </header>
 
   <main class="container">
@@ -24,43 +27,16 @@
         <div class="control">
           <button id="splitButton" class="btn">行に分割して表示</button>
         </div>
+        <div class="control">
+          <button id="playAllButton" class="btn">全体を読み上げる</button>
+        </div>
         <div class="control grow"></div>
-        <div class="control">
-          <button id="stopAllButton" class="btn btn-outline">全て停止</button>
-        </div>
       </div>
-      <div class="voice-info" id="voiceInfo">音声選択中...</div>
+      <div class="voice-info" id="voiceInfo">ElevenLabs音声を読み込み中...</div>
       <div class="controls-row" style="margin-top:6px">
-        <div class="control">
-          <label for="ttsProvider">音声エンジン</label>
-          <select id="ttsProvider">
-            <option value="web">Web Speech API</option>
-            <option value="elevenlabs" selected>ElevenLabs</option>
-          </select>
-        </div>
         <div class="control">
           <label for="voiceSelect">音声</label>
           <select id="voiceSelect"></select>
-        </div>
-        <div class="control">
-          <label><input id="maleOnly" type="checkbox" checked> 男性優先</label>
-        </div>
-        <div class="control">
-          <label for="langSelect">言語</label>
-          <select id="langSelect">
-            <option value="auto" selected>自動(英語優先)</option>
-            <option value="en-US">英語(米国)</option>
-            <option value="en-GB">英語(英国)</option>
-            <option value="en">英語(その他)</option>
-            <option value="ja-JP">日本語</option>
-            <option value="*">全て</option>
-          </select>
-        </div>
-        <div class="control">
-          <button id="refreshVoices" class="btn btn-outline">音声を更新</button>
-        </div>
-        <div class="control">
-          <button id="testApi" class="btn btn-outline">API接続テスト</button>
         </div>
       </div>
 
@@ -83,10 +59,6 @@
       <div id="linesContainer" class="lines-container" aria-live="polite"></div>
     </section>
   </main>
-
-  <footer class="app-footer">
-    <small>Web Speech API と ElevenLabs API を使用してブラウザで読み上げます。</small>
-  </footer>
 
   <script src="script.js"></script>
   
