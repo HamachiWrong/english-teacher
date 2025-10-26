@@ -5,7 +5,7 @@
 
   const inputEl = document.getElementById('inputText');
   const splitButton = document.getElementById('splitButton');
-  const playAllButton = document.getElementById('playAllButton');
+  const continuousPlayButton = document.getElementById('continuousPlayButton');
   const linesContainer = document.getElementById('linesContainer');
   const voiceInfoEl = document.getElementById('voiceInfo');
   const rateInput = document.getElementById('rateInput');
@@ -15,9 +15,10 @@
   const pitchValue = document.getElementById('pitchValue');
   const volumeInput = document.getElementById('volumeInput');
   const volumeValue = document.getElementById('volumeValue');
+  const engineSelect = document.getElementById('engineSelect');
 
   // ElevenLabs API設定
-  const ELEVENLABS_API_KEY = 'sk_5cf916d2d44a5678a646f71557d2e3d489c6981c328e0957';
+  const ELEVENLABS_API_KEY = 'sk_2da63f8ca0289839043cb1a8851f60a6de1920c2a6e2380d';
   const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
   
   // APIキーの検証
@@ -31,8 +32,57 @@
     return true;
   }
   
+  /** @type {string} */
+  let currentEngine = 'elevenlabs'; // 'webspeech' or 'elevenlabs'
+  
   /** @type {string|null} */
   let selectedElevenLabsVoice = null;
+  
+  /** @type {string|null} */
+  let selectedWebSpeechVoice = null;
+  
+  /** @type {boolean} */
+  let isContinuousPlaying = false;
+  
+  /** @type {number} */
+  let currentPlayingIndex = -1;
+
+  /** @type {Array} */
+  let elevenLabsVoices = [];
+  
+  /** @type {Array} */
+  let webSpeechVoices = [];
+
+  // TTS音声キャッシュ（voiceId + text -> objectURL）
+  const ttsAudioCache = new Map();
+  function getCacheKey(text) {
+    return `${currentEngine}::${selectedElevenLabsVoice || selectedWebSpeechVoice || ''}::${text}`;
+  }
+  async function getAudioUrlForText(text) {
+    if (currentEngine === 'webspeech') {
+      // Web Speech APIはキャッシュしない（直接再生）
+      return null;
+    }
+    
+    const key = getCacheKey(text);
+    if (ttsAudioCache.has(key)) {
+      return ttsAudioCache.get(key);
+    }
+    
+    if (currentEngine === 'elevenlabs') {
+      const url = await generateElevenLabsSpeech(text, selectedElevenLabsVoice);
+      ttsAudioCache.set(key, url);
+      return url;
+    }
+    
+    return null;
+  }
+  function clearTtsCache() {
+    for (const url of ttsAudioCache.values()) {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }
+    ttsAudioCache.clear();
+  }
 
   // ElevenLabs API機能
   async function fetchElevenLabsVoices() {
@@ -105,6 +155,90 @@
     }
   }
 
+  // Web Speech API機能
+  function getWebSpeechVoices() {
+    if (!('speechSynthesis' in window)) {
+      console.error('Web Speech APIがサポートされていません');
+      return [];
+    }
+    return speechSynthesis.getVoices();
+  }
+
+  async function buildWebSpeechVoiceList() {
+    voiceSelect.innerHTML = '<option value="">音声を読み込み中...</option>';
+    voiceInfoEl.textContent = 'Web Speech API音声を読み込み中...';
+    
+    try {
+      // ブラウザによっては一度setTimeoutが必要な場合がある
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const voices = getWebSpeechVoices();
+      webSpeechVoices = voices;
+      
+      voiceSelect.innerHTML = '';
+      
+      if (voices.length === 0) {
+        voiceSelect.innerHTML = '<option value="">音声が見つかりません</option>';
+        voiceInfoEl.textContent = 'Web Speech API音声が見つかりませんでした。';
+        return;
+      }
+
+      console.log('利用可能なWeb Speech音声:', voices.length);
+
+      // 英語の音声をフィルタリング
+      const englishVoices = voices.filter(voice => 
+        voice.lang.startsWith('en') || voice.lang.includes('English')
+      );
+
+      (englishVoices.length > 0 ? englishVoices : voices).forEach(voice => {
+        const opt = document.createElement('option');
+        opt.value = voice.name;
+        opt.textContent = `${voice.name} (${voice.lang})`;
+        voiceSelect.appendChild(opt);
+      });
+
+      // デフォルト音声を選択
+      if (voiceSelect.options.length > 0) {
+        voiceSelect.value = voiceSelect.options[0].value;
+        selectedWebSpeechVoice = voiceSelect.options[0].value;
+      }
+
+      updateVoiceInfo();
+    } catch (error) {
+      console.error('Web Speech音声一覧構築エラー:', error);
+      voiceSelect.innerHTML = '<option value="">エラー: 音声を取得できません</option>';
+      voiceInfoEl.textContent = `Web Speech API エラー: ${error.message}`;
+    }
+  }
+
+  function speakWithWebSpeech(text) {
+    return new Promise((resolve, reject) => {
+      if (!('speechSynthesis' in window)) {
+        reject(new Error('Web Speech APIがサポートされていません'));
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      if (selectedWebSpeechVoice) {
+        const voices = getWebSpeechVoices();
+        const voice = voices.find(v => v.name === selectedWebSpeechVoice);
+        if (voice) {
+          utterance.voice = voice;
+        }
+      }
+
+      utterance.rate = parseFloat(rateInput.value);
+      utterance.pitch = parseFloat(pitchInput.value);
+      utterance.volume = parseFloat(volumeInput.value);
+
+      utterance.onend = () => resolve();
+      utterance.onerror = (e) => reject(new Error(e.error));
+      
+      speechSynthesis.speak(utterance);
+    });
+  }
+
   function updateRateLabel() {
     rateValue.textContent = parseFloat(rateInput.value).toFixed(2) + 'x';
   }
@@ -120,7 +254,11 @@
   volumeInput.addEventListener('input', updatePitchVolumeLabels);
 
   async function buildVoiceList() {
-    await buildElevenLabsVoiceList();
+    if (currentEngine === 'webspeech') {
+      await buildWebSpeechVoiceList();
+    } else if (currentEngine === 'elevenlabs') {
+      await buildElevenLabsVoiceList();
+    }
   }
 
   async function buildElevenLabsVoiceList() {
@@ -169,15 +307,28 @@
   }
 
   function updateVoiceInfo() {
-    if (selectedElevenLabsVoice) {
-      const voice = elevenLabsVoices.find(v => v.voice_id === selectedElevenLabsVoice);
-      if (voice) {
-        voiceInfoEl.textContent = `ElevenLabs音声: ${voice.name} (${voice.labels?.gender || 'unknown'})`;
+    if (currentEngine === 'webspeech') {
+      if (selectedWebSpeechVoice) {
+        const voice = webSpeechVoices.find(v => v.name === selectedWebSpeechVoice);
+        if (voice) {
+          voiceInfoEl.textContent = `Web Speech音声: ${voice.name} (${voice.lang})`;
+        } else {
+          voiceInfoEl.textContent = 'Web Speech音声: 選択中...';
+        }
+      } else {
+        voiceInfoEl.textContent = 'Web Speech音声: 選択中...';
+      }
+    } else if (currentEngine === 'elevenlabs') {
+      if (selectedElevenLabsVoice) {
+        const voice = elevenLabsVoices.find(v => v.voice_id === selectedElevenLabsVoice);
+        if (voice) {
+          voiceInfoEl.textContent = `ElevenLabs音声: ${voice.name} (${voice.labels?.gender || 'unknown'})`;
+        } else {
+          voiceInfoEl.textContent = 'ElevenLabs音声: 選択中...';
+        }
       } else {
         voiceInfoEl.textContent = 'ElevenLabs音声: 選択中...';
       }
-    } else {
-      voiceInfoEl.textContent = 'ElevenLabs音声: 選択中...';
     }
   }
 
@@ -190,8 +341,32 @@
   function initializeApp() {
     console.log('アプリ初期化中...');
     
-    // Try initial selection
+    // 初期エンジン設定
+    engineSelect.value = currentEngine;
     refreshVoiceSelection();
+    
+    // エンジン切り替えイベント
+    engineSelect.addEventListener('change', async () => {
+      currentEngine = engineSelect.value;
+      clearTtsCache();
+      
+      // エンジンが変わる前に連続再生を停止
+      if (isContinuousPlaying) {
+        stopContinuousPlay();
+      }
+      
+      // 音声リストを更新
+      await buildVoiceList();
+    });
+    
+    // Web Speech APIの音声リスト更新イベント
+    if ('speechSynthesis' in window) {
+      speechSynthesis.addEventListener('voiceschanged', () => {
+        if (currentEngine === 'webspeech') {
+          buildWebSpeechVoiceList();
+        }
+      });
+    }
   }
   
   // DOM読み込み完了後に初期化
@@ -202,7 +377,13 @@
   }
 
   voiceSelect.addEventListener('change', () => {
-    selectedElevenLabsVoice = voiceSelect.value;
+    if (currentEngine === 'webspeech') {
+      selectedWebSpeechVoice = voiceSelect.value;
+    } else if (currentEngine === 'elevenlabs') {
+      selectedElevenLabsVoice = voiceSelect.value;
+      // 音声が変わったらキャッシュをクリア
+      clearTtsCache();
+    }
     updateVoiceInfo();
   });
 
@@ -270,40 +451,38 @@
       setPlaying(true);
 
       try {
-        await playElevenLabsSpeech(lineText);
+        if (currentEngine === 'webspeech') {
+          // Web Speech APIで再生
+          if (!selectedWebSpeechVoice) {
+            throw new Error('音声を選択してください');
+          }
+          await speakWithWebSpeech(lineText);
+          setPlaying(false);
+        } else if (currentEngine === 'elevenlabs') {
+          // ElevenLabsで再生
+          const audioUrl = await getAudioUrlForText(lineText);
+          if (!audioUrl) {
+            throw new Error('ElevenLabs APIで音声を生成できませんでした');
+          }
+          const audio = new Audio(audioUrl);
+          
+          audio.onended = () => {
+            setPlaying(false);
+          };
+          
+          audio.onerror = () => {
+            setPlaying(false);
+            throw new Error('音声の再生に失敗しました');
+          };
+
+          await audio.play();
+        }
       } catch (error) {
-        console.error('音声再生エラー:', error);
         setPlaying(false);
+        console.error('音声再生エラー:', error);
         alert(`音声再生エラー: ${error.message}`);
       }
     });
-
-    async function playElevenLabsSpeech(text) {
-      if (!selectedElevenLabsVoice) {
-        throw new Error('ElevenLabs音声が選択されていません');
-      }
-
-      try {
-        const audioUrl = await generateElevenLabsSpeech(text, selectedElevenLabsVoice);
-        const audio = new Audio(audioUrl);
-        
-        audio.onended = () => {
-          setPlaying(false);
-          URL.revokeObjectURL(audioUrl);
-        };
-        
-        audio.onerror = () => {
-          setPlaying(false);
-          URL.revokeObjectURL(audioUrl);
-          throw new Error('音声の再生に失敗しました');
-        };
-
-        await audio.play();
-      } catch (error) {
-        setPlaying(false);
-        throw error;
-      }
-    }
 
 
     return item;
@@ -322,59 +501,113 @@
 
   splitButton.addEventListener('click', renderLines);
 
-  // 全体読み上げ機能
-  playAllButton.addEventListener('click', async () => {
-    const text = inputEl.value.trim();
-    if (!text) {
-      alert('テキストを入力してください');
+  // 連続再生機能
+  continuousPlayButton.addEventListener('click', async () => {
+    const lineItems = document.querySelectorAll('.line-item');
+    if (lineItems.length === 0) {
+      alert('まず「行に分割して表示」をクリックしてください');
       return;
     }
 
-    if (!selectedElevenLabsVoice) {
+    if (currentEngine === 'webspeech' && !selectedWebSpeechVoice) {
+      alert('音声を選択してください');
+      return;
+    } else if (currentEngine === 'elevenlabs' && !selectedElevenLabsVoice) {
       alert('音声を選択してください');
       return;
     }
 
-    try {
-      // ボタンを無効化
-      playAllButton.disabled = true;
-      playAllButton.textContent = '読み上げ中...';
-
-      // 全体テキストを読み上げ
-      await playElevenLabsSpeech(text);
-
-    } catch (error) {
-      console.error('全体読み上げエラー:', error);
-      alert(`読み上げエラー: ${error.message}`);
-    } finally {
-      // ボタンを再有効化
-      playAllButton.disabled = false;
-      playAllButton.textContent = '全体を読み上げる';
+    if (isContinuousPlaying) {
+      // 連続再生を停止
+      stopContinuousPlay();
+    } else {
+      // 連続再生を開始
+      await startContinuousPlay(lineItems);
     }
   });
 
-  // 全体読み上げ用の関数
-  async function playElevenLabsSpeech(text) {
-    if (!selectedElevenLabsVoice) {
-      throw new Error('ElevenLabs音声が選択されていません');
-    }
+  // 連続再生開始
+  async function startContinuousPlay(lineItems) {
+    isContinuousPlaying = true;
+    currentPlayingIndex = 0;
+    continuousPlayButton.textContent = '停止する';
+
+    // 全ての再生状態をリセット
+    document.querySelectorAll('.line-item.playing').forEach(el => el.classList.remove('playing'));
 
     try {
-      const audioUrl = await generateElevenLabsSpeech(text, selectedElevenLabsVoice);
-      const audio = new Audio(audioUrl);
-      
-      audio.onended = () => {
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      audio.onerror = () => {
-        URL.revokeObjectURL(audioUrl);
-        throw new Error('音声の再生に失敗しました');
-      };
+      for (let i = 0; i < lineItems.length && isContinuousPlaying; i++) {
+        currentPlayingIndex = i;
+        const lineItem = lineItems[i];
+        const lineText = lineItem.querySelector('.line-text').textContent.trim();
+        
+        if (!lineText) continue;
 
-      await audio.play();
+        // 現在の行を再生状態に
+        lineItem.classList.add('playing');
+
+        // 音声再生（キャッシュ利用）
+        await playSingleLine(lineText);
+
+        // 再生完了後、少し待機
+        if (isContinuousPlaying && i < lineItems.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // 再生状態を解除
+        lineItem.classList.remove('playing');
+      }
     } catch (error) {
-      throw error;
+      console.error('連続再生エラー:', error);
+      alert(`読み上げエラー: ${error.message}`);
+    } finally {
+      stopContinuousPlay();
+    }
+  }
+
+  // 連続再生停止
+  function stopContinuousPlay() {
+    isContinuousPlaying = false;
+    currentPlayingIndex = -1;
+    continuousPlayButton.textContent = '連続再生する';
+    
+    // 全ての再生状態をリセット
+    document.querySelectorAll('.line-item.playing').forEach(el => el.classList.remove('playing'));
+  }
+
+  // 単一行の再生（キャッシュ利用）
+  async function playSingleLine(text) {
+    if (currentEngine === 'webspeech') {
+      if (!selectedWebSpeechVoice) {
+        throw new Error('Web Speech音声が選択されていません');
+      }
+      await speakWithWebSpeech(text);
+    } else if (currentEngine === 'elevenlabs') {
+      if (!selectedElevenLabsVoice) {
+        throw new Error('ElevenLabs音声が選択されていません');
+      }
+
+      try {
+        const audioUrl = await getAudioUrlForText(text);
+        if (!audioUrl) {
+          throw new Error('ElevenLabs APIで音声を生成できませんでした');
+        }
+        const audio = new Audio(audioUrl);
+        
+        return new Promise((resolve, reject) => {
+          audio.onended = () => {
+            resolve();
+          };
+          
+          audio.onerror = () => {
+            reject(new Error('音声の再生に失敗しました'));
+          };
+
+          audio.play().catch(reject);
+        });
+      } catch (error) {
+        throw error;
+      }
     }
   }
 

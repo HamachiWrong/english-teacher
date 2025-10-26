@@ -27,12 +27,18 @@
         <div class="control">
           <button id="splitButton" class="btn">行に分割して表示</button>
         </div>
-        <div class="control">
-          <button id="playAllButton" class="btn">全体を読み上げる</button>
-        </div>
         <div class="control grow"></div>
       </div>
-      <div class="voice-info" id="voiceInfo">ElevenLabs音声を読み込み中...</div>
+      <div class="controls-row" style="margin-top:6px">
+        <div class="control">
+          <label for="engineSelect">音声エンジン</label>
+          <select id="engineSelect">
+            <option value="webspeech">Web Speech API（無料・無制限）</option>
+            <option value="elevenlabs">ElevenLabs（高品質・利用制限あり）</option>
+          </select>
+        </div>
+      </div>
+      <div class="voice-info" id="voiceInfo">音声エンジンを選択中...</div>
       <div class="controls-row" style="margin-top:6px">
         <div class="control">
           <label for="voiceSelect">音声</label>
@@ -55,7 +61,10 @@
     </section>
 
     <section class="lines-panel">
-      <h2 class="section-title">行一覧</h2>
+      <div class="section-header">
+        <h2 class="section-title">行一覧</h2>
+        <button id="continuousPlayButton" class="btn">連続再生する</button>
+      </div>
       <div id="linesContainer" class="lines-container" aria-live="polite"></div>
     </section>
   </main>
