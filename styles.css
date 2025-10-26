@@ -345,19 +345,19 @@ select:focus {
   
   .section-header {
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
     margin-bottom: 24px;
   }
   
   .section-title {
     font-size: 1.25rem;
-    text-align: center;
   }
   
-  .btn {
-    padding: 10px 20px;
-    font-size: 0.85rem;
+  .section-header .btn {
+    width: 100%;
+    padding: 14px 24px;
+    font-size: 0.9rem;
   }
   
   .controls-row {
