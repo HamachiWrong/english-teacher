@@ -201,7 +201,7 @@ select:focus {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .section-title { 
@@ -344,12 +344,15 @@ select:focus {
   }
   
   .section-header {
-    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
     gap: 12px;
+    margin-bottom: 24px;
   }
   
   .section-title {
     font-size: 1.25rem;
+    text-align: center;
   }
   
   .btn {
